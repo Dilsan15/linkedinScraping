@@ -2,8 +2,11 @@
 import os
 from scraping import jobScraper
 
-# Number of forms needed to be scraped
-num_of_jobs_needed = 10
+# Number of forms needed to be scraped. Keep this number below 988 as this is linkedin's limit for loading more jobs
+num_of_jobs_needed = 988
+
+# Timezone
+scraping_timezone = "MDT"
 
 # Form website link
 basic_link = "https://ca.linkedin.com/"
@@ -15,15 +18,15 @@ website_page = "jobs/search?keywords=Machine%20Learning&location=Canada&geoId=10
 driver_path = os.environ["DRIVER_PATH"]  # Todo("CHANGE THIS TO UR PATH! so it looks like driver_path = 'YOUR STRING' ")
 
 # time out needed between events, based on Wi-Fi and PC performance
-time_out = 5
+time_out = 3
 
 
 
 # Boolean which controls if the browser activities will be shown on screen on or not
-browser_visible = True
+browser_visible = False
 
 if __name__ == "__main__":
 
-    JobScraper = jobScraper(basic_link, website_page, driver_path, num_of_jobs_needed, time_out,browser_visible)
+    JobScraper = jobScraper(basic_link, website_page, driver_path, num_of_jobs_needed, time_out,browser_visible, scraping_timezone)
 
     JobScraper.getJobPostings()

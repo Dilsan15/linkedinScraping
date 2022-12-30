@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 import pandas as pd
 from selenium import webdriver
@@ -8,16 +9,16 @@ from selenium.webdriver.common.by import By
 
 class jobScraper:
 
-    def __init__(self, basic_link, website_page, driver_path, links_needed, time_out, broswer_vis):
+    def __init__(self, basic_link, website_page, driver_path, links_needed, time_out, broswer_vis, timezone):
 
         self.links_needed = links_needed
         self.website_page = website_page
         self.current_link = basic_link + website_page
         self.driver_path = driver_path
         self.time_out = time_out
+        self.timezone = timezone
 
         self.link_stored = list()
-        self.b_soup = None
 
         sel_service = Service(self.driver_path)
         option = webdriver.ChromeOptions()
@@ -33,7 +34,7 @@ class jobScraper:
 
     def getJobPostings(self):
 
-        while len(self.link_stored) <= self.links_needed:
+        while len(self.link_stored) < self.links_needed:
 
             time.sleep(self.time_out)
             old_height = self.driver.execute_script("return document.body.scrollHeight")
@@ -48,11 +49,18 @@ class jobScraper:
             new_height = self.driver.execute_script("return document.body.scrollHeight")
 
             if old_height == new_height:
+
                 self.driver.find_element(By.XPATH, '//*[@id="main-content"]/section[2]/button').click()
                 time.sleep(self.time_out)
 
+            elif len(self.link_stored) == 988:
+                break
+
+            print(str(len(self.link_stored))+ " / " + str(self.links_needed))
+
         if len(self.link_stored) >= self.links_needed:
             self.link_stored = self.link_stored[:self.links_needed]
+        print("final" + str(len(self.link_stored)) + "/" + str(self.links_needed))
 
     def getJobData(self):
 
@@ -60,23 +68,37 @@ class jobScraper:
 
         for jobPost in self.link_stored:
             jobData = {}
-            self.driver.get(jobPost)
             time.sleep(self.time_out)
+            self.driver.get(jobPost)
 
             while self.driver.current_url != jobPost:
                 if self.driver.current_url == "https://www.linkedin.com/in/unavailable/":
                     break
 
-                time.sleep(self.time_out)
+
                 self.driver.get(jobPost)
+                time.sleep(self.time_out)
 
             while True:
                 try:
 
-                    jobData['Heading'] = self.driver.find_element(By.XPATH, '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h1').text
+
+                    jobData['Title'] = self.driver.find_element(By.XPATH, '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h1').text
+                    jobData['Url'] = self.driver.current_url
+                    jobData['date-scraped'] = f"{datetime.now()} {self.timezone}"
+                    jobData['relative-posted-time'] = self.driver.find_element(By.XPATH, '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[2]/span[1]').text
+
+
                     jobData['Company'] = self.driver.find_element(By.XPATH,
                                                                   '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[1]/span[1]/a').text
                     jobData['Location'] = self.driver.find_element(By.XPATH, '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[1]/span[2]').text
+
+                    try:
+                        jobData['applicant-num'] = self.driver.find_element(By.XPATH, '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[2]/span[2]').text
+                    except:
+                        jobData['applicant-num'] = self.driver.find_element(By.XPATH,
+                                                                            '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[2]/figure/figcaption').text
+
 
                     try:
                         jobData['Seniority'] = self.driver.find_element(By.XPATH, '//*[@id="main-content"]/section[1]/div/div/section[1]/div/ul/li[1]/span').text
@@ -111,17 +133,19 @@ class jobScraper:
                     break
 
                 except Exception as e:
+                    print(e)
                     time.sleep(30)
                     self.driver.get(jobPost)
 
             allJobData.append(jobData)
+            print((str(self.link_stored.index(jobPost)+1)  +" / " + str(self.links_needed)))
 
         return allJobData
 
     def saveToCsv(self, data):
 
         df = pd.DataFrame(data)
-        df.to_csv('data/jobData.csv', mode='w', index=False)
+        df.to_csv('data/canadaMachineLearningJobData.csv', mode='w', index=False)
         print("Data Saved")
         print(df)
 
