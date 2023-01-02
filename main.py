@@ -20,8 +20,6 @@ driver_path = os.environ["DRIVER_PATH"]  # Todo("CHANGE THIS TO UR PATH! so it l
 # time out needed between events, based on Wi-Fi and PC performance
 time_out = 3
 
-
-
 # Boolean which controls if the browser activities will be shown on screen on or not
 browser_visible = False
 
@@ -29,4 +27,4 @@ if __name__ == "__main__":
 
     JobScraper = jobScraper(basic_link, website_page, driver_path, num_of_jobs_needed, time_out,browser_visible, scraping_timezone)
 
-    JobScraper.getJobPostings()
+    
