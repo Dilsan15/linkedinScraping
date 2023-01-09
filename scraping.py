@@ -1,7 +1,8 @@
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
+from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -42,7 +43,9 @@ class jobScraper:
         while len(self.link_stored) < self.links_needed:
 
             time.sleep(self.time_out)
+
             old_height = self.driver.execute_script("return document.body.scrollHeight")
+            old_num = len(self.link_stored)
 
             self.link_stored.extend([hidLink.get_attribute('href') for hidLink in
                                      self.driver.find_elements(By.CLASS_NAME, "base-card__full-link")])
@@ -55,17 +58,20 @@ class jobScraper:
 
             if old_height == new_height:
 
-                self.driver.find_element(By.XPATH, '//*[@id="main-content"]/section[2]/button').click()
+                if old_num == len(self.link_stored):
+                    break
+
+                self.driver.find_element(By.CLASS_NAME, 'infinite-scroller__show-more-button').click()
                 time.sleep(self.time_out)
 
-            elif len(self.link_stored) == 988:
-                break
+
+
 
             print(str(len(self.link_stored)) + " / " + str(self.links_needed))
 
         if len(self.link_stored) >= self.links_needed:
             self.link_stored = self.link_stored[:self.links_needed]
-        print("final" + str(len(self.link_stored)) + "/" + str(self.links_needed))
+        print("final" + str(len(self.link_stored)) + " /" + str(self.links_needed))
         # ^^ Will indicate how many links have  been scraped so far
 
     def getJobData(self):
@@ -88,55 +94,73 @@ class jobScraper:
                 # anti-scraping measures
                 try:
 
-                    jobData['Title'] = self.driver.find_element(By.XPATH,
-                                                                '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h1').text
+                    bSoup = BeautifulSoup(self.driver.page_source, 'html.parser')
+
+                    jobData['Title'] = bSoup.find('h1', {'class': 'top-card-layout__title'}).text
                     jobData['Url'] = self.driver.current_url
-                    jobData['date-scraped'] = f"{datetime.now()} {self.timezone}"
-                    jobData['relative-posted-time'] = self.driver.find_element(By.XPATH,
-                                                                               '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[2]/span[1]').text
+                    jobData['Date-Scraped'] = f"{datetime.now()} {self.timezone}"
 
-                    jobData['Company'] = self.driver.find_element(By.XPATH,
-                                                                  '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[1]/span[1]/a').text
-                    jobData['Location'] = self.driver.find_element(By.XPATH,
-                                                                   '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[1]/span[2]').text
+                    date_posted = bSoup.find('span', {'class': 'posted-time-ago__text'}).text
+
+                    if "hour" or "minute" in date_posted:
+                        jobData["Date-Posted"] = datetime.now().strftime("%Y-%m-%d")
+
+                    elif "day" in date_posted:
+                        jobData["Date-Posted"] = (
+                                datetime.now() - timedelta(days=int(date_posted[0:1].strip()))).strftime(
+                            "%Y-%m-%d")
+
+                    else:
+                        jobData["Date-Posted"] = (
+                                datetime.now() - timedelta(days=(int(date_posted[0:1].strip()))) * 7).strftime(
+                            "%Y-%m-%d")
+
+                    jobData['Company'] = bSoup.find('a', {
+                        'class': 'topcard__org-name-link topcard__flavor--black-link'}).text
+                    jobData['Location'] = bSoup.find('span', {'class': 'topcard__flavor topcard__flavor--bullet'}).text
+
 
                     try:
-                        jobData['applicant-num'] = self.driver.find_element(By.XPATH,
-                                                                            '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[2]/span[2]').text
-                    except:
-                        jobData['applicant-num'] = self.driver.find_element(By.XPATH,
-                                                                            '//*[@id="main-content"]/section[1]/div/section[2]/div/div[1]/div/h4/div[2]/figure/figcaption').text
+                        jobData['applicant-num'] = bSoup.find('figcaption', {'class': 'num-applicants__caption'}).text
+
+                    except AttributeError:
+                        jobData['applicant-num'] = bSoup.find('span', {'class': 'num-applicants__caption'}).text
+
+                    # Default Values
+
+                    criteria_dict = {"Seniority": "N/A",
+                                     "Employment Type": "N/A",
+                                     "Job Function": "N/A",
+                                     "Industry": "N/A"}
+
+                    criteria_list = bSoup.find('ul', {'class': 'description__job-criteria-list'}).find_all('li')
 
                     try:
-                        jobData['Seniority'] = self.driver.find_element(By.XPATH,
-                                                                        '//*[@id="main-content"]/section[1]/div/div/section[1]/div/ul/li[1]/span').text
+                        criteria_dict['Seniority'] = criteria_list[0].find('span',
+                                                                           {
+                                                                               'class': 'description__job-criteria-text'}).text
                     except:
                         print("No Seniority")
-                        jobData["Seniority"] = "None"
 
                     try:
-                        jobData['Employment-type'] = self.driver.find_element(By.XPATH,
-                                                                              '//*[@id="main-content"]/section[1]/div/div/section[1]/div/ul/li[2]/span').text
-
+                        jobData['Employment-type'] = criteria_list[1].find('span', {
+                            'class': 'description__job-criteria-text'}).text
                     except:
                         print("no Employment-type")
-                        jobData['Employment-type'] = "None"
 
                     try:
-                        jobData['Job-Function'] = self.driver.find_element(By.XPATH,
-                                                                           '//*[@id="main-content"]/section[1]/div/div/section[1]/div/ul/li[3]/span').text
+                        jobData['Job-Function'] = criteria_list[2].find('span', {
+                            'class': 'description__job-criteria-text'}).text
                     except:
                         print("no job function")
-                        jobData['Job-Function'] = "None"
 
                     try:
-                        jobData['Industries'] = self.driver.find_element(By.XPATH,
-                                                                         '//*[@id="main-content"]/section[1]/div/div/section[1]/div/ul/li[4]/span').text
+                        jobData['Industries'] = criteria_list[3].find('span',
+                                                                      {'class': 'description__job-criteria-text'}).text
                     except:
-                        jobData['Industries'] = "None"
+                        print("no industries")
 
-                    jobData['Description'] = self.driver.find_element(By.XPATH,
-                                                                      '//*[@id="main-content"]/section[1]/div/div/section[1]/div/div/section/div').text
+                    jobData['Description'] = bSoup.find('div', {'class': 'show-more-less-html__markup'}).text
 
                     print(jobData)
                     break
@@ -155,6 +179,6 @@ class jobScraper:
         """"Saves the data to a csv file and overwrites any previous data"""
 
         df = pd.DataFrame(data)
-        df.to_csv('data/canadaMachineLearningJobData.csv', mode='w', index=False)
+        df.to_csv('data/machineLearningJobData.csv', mode='w', index=False)
         print("Data Saved")
         print(df)
